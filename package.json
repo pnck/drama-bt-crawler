@@ -1,0 +1,17 @@
+{
+  "name": "crawler",
+  "version": "0.0.1",
+  "description": "",
+  "scripts": {
+    "craw": "node crawl.mjs --dry-run",
+    "download": "node crawl.mjs"
+  },
+  "dependencies": {
+    "axios": "^1.2.3",
+    "cheerio": "1.0.0-rc.12",
+    "js-beautify": "^1.14.7"
+  },
+  "devDependencies": {
+    "prettier": "^2.8.3"
+  }
+}
