@@ -1,7 +1,6 @@
 /* 
     "axios": "^1.2.3",
     "cheerio": "1.0.0-rc.12",
-    "js-beautify": "^1.14.7"
 */
 
 import axios from "axios";
