@@ -4,6 +4,7 @@
 */
 
 import axios from "axios";
+import { AxiosError } from "axios";
 import * as cheerio from "cheerio";
 import * as fs from "fs";
 import { env, argv } from "process";
@@ -17,28 +18,19 @@ const TARGET_PAGE = env?.TARGET_PAGE
 
 let recordMap = {};
 
-const makeRPC = (method, params) => {
-  return new Promise((resolve, reject) => {
-    axios
-      .post(
-        ARIA2_API,
-        {
-          jsonrpc: "2.0",
-          id: "CRAWLER",
-          method,
-          params,
-        },
-        { headers: { "Content-Type": "application/json" } }
-      )
-      .then((resp) => {
-        const { request, config, ...others } = resp;
-        resolve({ ...others });
-      })
-      .catch((err) => {
-        console.log("!ERROR: ", err.message);
-        reject(err);
-      });
-  });
+const makeRPC = async (method, params) => {
+  try {
+    const resp = await axios.post(
+      ARIA2_API,
+      { jsonrpc: "2.0", id: "CRAWLER", method, params },
+      { timeout: 10000, headers: { "Content-Type": "application/json" } }
+    );
+    const { request, config, ...others } = resp;
+    return others;
+  } catch (err) {
+    console.log("!ERROR: ", err.message);
+    throw err;
+  }
 };
 
 (async () => {
@@ -55,11 +47,25 @@ const makeRPC = (method, params) => {
     console.log("!WARN: create records.json");
   }
   try {
-    let resp = await axios.get(TARGET_PAGE);
-    const $ = cheerio.load(resp.data);
+    const $ = await axios
+      .get(TARGET_PAGE, {
+        timeout: 10000,
+        headers: { "User-Agent": "Mozilla/5.0 Chrome/109.0.0.0" },
+      })
+      .then((resp) => {
+        if (resp.status === 200) {
+          return cheerio.load(resp.data);
+        }
+        console.log("!ERROR: ", `code ${resp.status}; ${resp.message}`);
+        throw new AxiosError({ response: resp });
+      })
+      .catch((err) => {
+        console.log("!ERROR: ", `Fetch target page failed; ${err.message}.`);
+        throw err;
+      });
     const script = $("div.article.content > script").text();
     if (!/\|EP\d{2}\|/.test(script)) {
-      console.log("Something wrong");
+      console.log("!ABORT: Something wrong");
       return;
     }
     let to_eval;
@@ -82,7 +88,7 @@ const makeRPC = (method, params) => {
     }, recordMap);
 
     if (!todo.length) {
-      console.log("Finished crawling with nothing to do");
+      console.log("!INFO: Finished crawling with nothing to do");
       return;
     }
 
@@ -98,7 +104,7 @@ const makeRPC = (method, params) => {
       return;
     }
 
-    resp = await makeRPC("aria2.getGlobalStat");
+    const resp = await makeRPC("aria2.getGlobalStat");
     if (resp.data?.result?.numActive) {
       console.log("!INFO: aria2 active:\n", resp.data.result);
       todo.forEach((item, i) => {
@@ -118,6 +124,7 @@ const makeRPC = (method, params) => {
       console.log("!INFO: records.json updated.");
     }
   } catch (err) {
-    console.log("!ABORT: ", "Error happened.");
+    // console.log(err);
+    console.log("!ABORT: ", `Error happened.(${err.code})`);
   }
 })();
